@@ -13,6 +13,8 @@ if (-not $RepoRoot) {
 if (-not $WorkDir) { $WorkDir = Join-Path $env:TEMP 'opencode\smicha-verify' }
 
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = New-Object System.Text.UTF8Encoding $false
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $ManifestPath = Join-Path $WorkDir 'citations.json'
 $IndexMapPath = Join-Path $WorkDir 'sefaria-index.json'
@@ -104,7 +106,7 @@ function Find-Citations {
             }
         }
 
-        $rambamPattern = 'רמב"ם\s+הלכות\s+([\p{IsHebrew}"'' ]+?)\s*(?:פ["'']?\s*([\p{IsHebrew}"'']{1,8}))?(?:\s+ה["'']?\s*([\p{IsHebrew}"'']{1,6}))?(?:\s|$|[);.,])'
+        $rambamPattern = 'רמב"ם\s+(?:הלכות\s+)?([\p{IsHebrew}"][\p{IsHebrew}" ]*?)\s*(?:פ"?\s*([\p{IsHebrew}"]{1,8}))?(?:\s+ה"?\s*([\p{IsHebrew}"]{1,6}))?(?=\s*[;,.):]|$)'
         $rambamMatch = [regex]::Match($line, $rambamPattern)
         if ($rambamMatch.Success) {
             $perek = $null; $halacha = $null
@@ -135,24 +137,29 @@ function Get-SefariaMaps {
     if (Test-Path -LiteralPath $IndexMapPath) {
         return Get-Content -LiteralPath $IndexMapPath -Raw -Encoding UTF8 | ConvertFrom-Json
     }
-    Write-Output 'fetching Sefaria index...'
+    Write-Host 'fetching Sefaria index...'
     $idx = Invoke-RestMethod -Uri 'https://www.sefaria.org/api/index/' -TimeoutSec 180
     $tractateMap = @{}
     $rambamMap = @{}
     function Walk-Tree {
-        param($nodes, [string]$CategoryPath)
+        param($nodes, [string]$Mode)
         foreach ($c in $nodes) {
-            $cat = if ($c.category) { $c.category } else { $CategoryPath }
-            $newPath = if ($CategoryPath) { "$CategoryPath/$cat" } else { "$cat" }
+            $m2 = $Mode
+            if ($c.category -eq 'Bavli' -or $c.title -in @('Bavli', 'Babylonian Talmud')) { $m2 = 'bavli' }
+            elseif ($c.category -eq 'Mishneh Torah' -or $c.title -in @('Mishneh Torah') -or $c.heTitle -in @('משנה תורה', 'יד החזקה')) { $m2 = 'rambam' }
+
+            if ($m2 -eq 'bavli' -and $c.heTitle -and $c.title -and $c.heTitle -notmatch '^סדר' -and $c.title -notmatch '^Seder' -and $c.heTitle -notmatch ' .. ' -and $c.title -notmatch ' on ') {
+                $script:tmap[$c.heTitle] = $c.title
+            }
+            if ($m2 -eq 'rambam' -and $c.heTitle -match 'הלכות' -and $c.heTitle -notmatch ' על ' -and $c.title -notmatch ' on ') {
+                $core = ($c.heTitle -split ',' | Where-Object { $_ -match 'הלכות' } | Select-Object -First 1)
+                if ($core) { $script:rmap[$core.Trim()] = ($c.title -replace '^Mishneh Torah,\s*', '') }
+            }
+
             if ($c.contents) {
-                Walk-Tree $c.contents $newPath
-            } elseif ($c.title -and $c.heTitle) {
-                if ($newPath -match '/Bavli' -and $newPath -notmatch 'Yerushalmi|Mishnah|Tosefta') {
-                    $script:tmap[$c.heTitle] = $c.title
-                }
-                if ($newPath -match 'Mishneh Torah' -and $c.heTitle -match '^הלכות') {
-                    $script:rmap[$c.heTitle] = $c.title
-                }
+                $childMode = $m2
+                if ($c.category -match 'Rishonim|Acharonim|Commentary' -or $c.title -match '^Rashi|^Tosafot|^Rif |^Meiri|^Chiddushei|on ') { $childMode = '' }
+                Walk-Tree $c.contents $childMode
             }
         }
     }
@@ -164,12 +171,18 @@ function Get-SefariaMaps {
         rambamBooks = $script:rmap
     }
     $maps | ConvertTo-Json -Depth 4 | Out-File -LiteralPath $IndexMapPath -Encoding utf8
-    Write-Output ("index maps built: {0} tractates, {1} rambam halachos-books" -f $script:tmap.Count, $script:rmap.Count)
+    Write-Host ("index maps built: {0} tractates, {1} rambam halachos-books" -f $script:tmap.Count, $script:rmap.Count)
     return $maps
 }
 
 function Resolve-Lookup {
     param($MapObject, [string]$Key)
+    if ($MapObject -is [hashtable]) {
+        if ($MapObject.ContainsKey($Key)) { return $MapObject[$Key] }
+        $bare = $Key -replace '^הלכות ', ''
+        foreach ($k in $MapObject.Keys) { if ($k -like "*$bare*") { return $MapObject[$k] } }
+        return $null
+    }
     $prop = $MapObject.PSObject.Properties[$Key]
     if ($prop) { return $prop.Value }
     $bare = $Key -replace '^הלכות ', ''
@@ -198,6 +211,7 @@ switch ($Mode) {
         Initialize-WorkDir
         if (-not (Test-Path -LiteralPath $ManifestPath)) { throw 'run extract first' }
         $citations = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($citations.PSObject.Properties['value']) { $citations = @($citations.value) }
         $maps = Get-SefariaMaps
 
         $targets = @{}
@@ -218,6 +232,10 @@ switch ($Mode) {
                     $key = 'rambam|{0}|{1}' -f $enEnc, $c.perek
                     $c | Add-Member -NotePropertyName resolvedBook -NotePropertyValue $en -Force
                 }
+                elseif ($en) {
+                    $c | Add-Member -NotePropertyName resolvedBook -NotePropertyValue $en -Force
+                    $script:bookOkCount++
+                }
             }
             elseif ($c.type -eq 'gemara') {
                 $en = Resolve-Lookup $maps.tractates $c.tractate
@@ -234,6 +252,7 @@ switch ($Mode) {
         }
 
         Write-Output ("unique fetch targets: {0} (of {1} citations)" -f $targets.Keys.Count, @($citations).Count)
+        $script:bookOkCount = 0
         $results = [ordered]@{}
         $n = 0
         foreach ($key in $targets.Keys) {
@@ -261,6 +280,31 @@ switch ($Mode) {
             if ($n % 50 -eq 0) { Write-Output ("  progress {0}/{1}" -f $n, $targets.Keys.Count) }
             Start-Sleep -Milliseconds 150
         }
+
+        $errored = @($results.Keys | Where-Object { $results[$_].status -like 'error*' })
+        if ($errored.Count -gt 0) {
+            Write-Output ("retrying {0} errored targets..." -f $errored.Count)
+            foreach ($key in $errored) {
+                $parts = $key -split '\|'
+                try {
+                    $uri = 'https://www.sefaria.org/api/texts/{0}.{1}?context=0&commentary=0' -f $parts[1], $parts[2]
+                    $resp = Invoke-RestMethod -Uri $uri -TimeoutSec 90
+                    if ($resp.text -is [array]) {
+                        $flat = @($resp.text | ForEach-Object { if ($_ -is [array]) { ($_ -join ' ') } else { [string]$_ } })
+                        $snippet = ($flat -join ' ')
+                    } else {
+                        $snippet = [string]$resp.text
+                    }
+                    if ($snippet.Length -gt 3500) { $snippet = $snippet.Substring(0, 3500) }
+                    $results[$key] = [pscustomobject]@{ status = 'ok'; snippet = $snippet }
+                } catch {
+                    $code = $null
+                    if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
+                    $results[$key] = [pscustomobject]@{ status = "error:$code"; snippet = '' }
+                }
+                Start-Sleep -Milliseconds 400
+            }
+        }
         $out = [pscustomobject]@{ citations = $citations; fetchResults = $results }
         $out | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $ResultsPath -Encoding utf8
         $ok = @($results.Values | Where-Object { $_.status -eq 'ok' }).Count
@@ -272,17 +316,25 @@ switch ($Mode) {
     'report' {
         if (-not (Test-Path -LiteralPath $ResultsPath)) { throw 'run fetch first' }
         $data = Get-Content -LiteralPath $ResultsPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($data.citations.PSObject.Properties['value']) {
+            $citationList = @($data.citations.value)
+        } else {
+            $citationList = @($data.citations)
+        }
         $resolvedCount = 0
+        $bookOkCount = 0
         $unresolved = @()
-        foreach ($c in $data.citations) {
+        foreach ($c in $citationList) {
             if ($c.targetKey) {
                 $r = $data.fetchResults.PSObject.Properties[$c.targetKey]
                 if ($r -and $r.Value.status -eq 'ok') { $resolvedCount++ } else { $unresolved += $c }
+            } elseif ($c.type -eq 'rambam' -and $c.resolvedBook -and -not $c.perek) {
+                $bookOkCount++
             } else {
                 $unresolved += $c
             }
         }
-        Write-Output ("citations: {0} total | {1} resolved | {2} unresolved" -f @($data.citations).Count, $resolvedCount, @($unresolved).Count)
+        Write-Output ("citations: {0} total | {1} resolved | {2} book-level (Rambam, no perek cited) | {3} unresolved" -f $citationList.Count, $resolvedCount, $bookOkCount, @($unresolved).Count)
         $unresolved | Group-Object type | ForEach-Object { Write-Output ("  {0}: {1}" -f $_.Name, $_.Count) }
         Write-Output ''
         Write-Output '--- unresolved detail (first 150) ---'
