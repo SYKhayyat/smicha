@@ -52,6 +52,25 @@ function Normalize-HebrewPunctuation {
     return $Text.Replace([char]0x05F4, '"').Replace([char]0x05F3, "'")
 }
 
+function Get-DefaultBranchFromPath {
+    param([string]$RelPath)
+    if ($RelPath -match '^(taaroves|issur-veheter|basar-bechalav|yoreh-deah|nidda)/') { return 'Y.D.' }
+    if ($RelPath -match '^choshen-mishpat/') { return 'C.M.' }
+    if ($RelPath -match '^even-haezer/') { return 'E.H.' }
+    return 'O.C.'
+}
+
+$script:RambamAliases = @{
+    'יום טוב'            = 'שביתת יו"ט'
+    'יו"ט'               = 'שביתת יו"ט'
+    'נדרים ושבועות'      = 'נדרים'
+    'סנהדרין ועדות'      = 'סנהדרין'
+    'נזקי ממון וחובל ומזיק' = 'נזקי ממון'
+    'גזלה ואבדה'         = 'גניבה'
+    'ציצית ותפילה ומזוזה וספר תורה' = 'ציצית'
+    'ציצית ות'           = 'ציצית'
+}
+
 function Find-Citations {
     param([string]$RawText, [string]$RelPath)
 
@@ -97,6 +116,7 @@ function Find-Citations {
             elseif ($ctx -match 'חו"מ|חושן משפט') { $branch = 'C.M.' }
             if (-not $branch) {
                 if ($m.Groups[1].Value -match '^(מ"ב|משנה ברורה|מג"א|מגן אברהם|ערוך השלחן|ערוה"ש|אליה רבה)$') { $branch = 'O.C.' }
+                else { $branch = Get-DefaultBranchFromPath $RelPath }
             }
 
             $found += [pscustomobject]@{
@@ -108,7 +128,7 @@ function Find-Citations {
 
         $rambamPattern = 'רמב"ם\s+(?:הלכות\s+)?([\p{IsHebrew}"][\p{IsHebrew}" ]*?)\s*(?:פ"?\s*([\p{IsHebrew}"]{1,8}))?(?:\s+ה"?\s*([\p{IsHebrew}"]{1,6}))?(?=\s*[;,.):]|$)'
         $rambamMatch = [regex]::Match($line, $rambamPattern)
-        if ($rambamMatch.Success) {
+        if ($rambamMatch.Success -and $rambamMatch.Value -match 'הלכות|פ"') {
             $perek = $null; $halacha = $null
             if ($rambamMatch.Groups[2].Success) { $perek = ConvertFrom-HebrewNumeral $rambamMatch.Groups[2].Value }
             if ($rambamMatch.Groups[3].Success) { $halacha = ConvertFrom-HebrewNumeral $rambamMatch.Groups[3].Value }
@@ -175,19 +195,36 @@ function Get-SefariaMaps {
     return $maps
 }
 
+function Get-NormalizedHebrew {
+    param([string]$s)
+    return ($s -replace '[\u05D5\u05D9\u05F4\u05F3"'' ]', '')
+}
+
 function Resolve-Lookup {
     param($MapObject, [string]$Key)
+    $normKey = Get-NormalizedHebrew $Key
+    $bareKey = $Key -replace '^הלכות ', ''
+    $normBare = Get-NormalizedHebrew $bareKey
+
     if ($MapObject -is [hashtable]) {
-        if ($MapObject.ContainsKey($Key)) { return $MapObject[$Key] }
-        $bare = $Key -replace '^הלכות ', ''
-        foreach ($k in $MapObject.Keys) { if ($k -like "*$bare*") { return $MapObject[$k] } }
+        foreach ($k in $MapObject.Keys) {
+            if ((Get-NormalizedHebrew $k) -eq $normKey) { return $MapObject[$k] }
+        }
+        foreach ($k in $MapObject.Keys) {
+            if ((Get-NormalizedHebrew $k).Contains($normBare)) { return $MapObject[$k] }
+        }
         return $null
     }
+
     $prop = $MapObject.PSObject.Properties[$Key]
     if ($prop) { return $prop.Value }
-    $bare = $Key -replace '^הלכות ', ''
-    $hit = $MapObject.PSObject.Properties | Where-Object { $_.Name -like "*$bare*" } | Select-Object -First 1
-    if ($hit) { return $hit.Value }
+    $best = $null
+    foreach ($p in $MapObject.PSObject.Properties) {
+        $nk = Get-NormalizedHebrew $p.Name
+        if ($nk -eq $normKey) { return $p.Value }
+        if (-not $best -and $nk.Contains($normBare)) { $best = $p }
+    }
+    if ($best) { return $best.Value }
     return $null
 }
 
@@ -226,7 +263,10 @@ switch ($Mode) {
                 $key = 'sa|Shulchan%20Arukh%2C%20{0}|{1}' -f $branchSlug, $c.siman
             }
             elseif ($c.type -eq 'rambam') {
-                $en = Resolve-Lookup $maps.rambamBooks ('הלכות ' + $c.title)
+                $lookupTitle = $c.title
+                if ($script:RambamAliases.ContainsKey($lookupTitle)) { $lookupTitle = $script:RambamAliases[$lookupTitle] }
+                $en = Resolve-Lookup $maps.rambamBooks ('הלכות ' + $lookupTitle)
+                if (-not $en) { $en = Resolve-Lookup $maps.rambamBooks ('הלכות ' + $c.title) }
                 if ($en -and $c.perek) {
                     $enEnc = [uri]::EscapeDataString("Mishneh Torah, $en")
                     $key = 'rambam|{0}|{1}' -f $enEnc, $c.perek
@@ -240,8 +280,9 @@ switch ($Mode) {
             elseif ($c.type -eq 'gemara') {
                 $en = Resolve-Lookup $maps.tractates $c.tractate
                 if ($en) {
+                    $amudAscii = if ($c.amud -eq [char]0x05D0) { 'a' } else { 'b' }
                     $enEnc = [uri]::EscapeDataString($en)
-                    $key = 'gemara|{0}|{1}{2}' -f $enEnc, $c.daf, $c.amud
+                    $key = 'gemara|{0}|{1}{2}' -f $enEnc, $c.daf, $amudAscii
                     $c | Add-Member -NotePropertyName resolvedTractate -NotePropertyValue $en -Force
                 }
             }
@@ -323,6 +364,7 @@ switch ($Mode) {
         }
         $resolvedCount = 0
         $bookOkCount = 0
+        $noiseCount = 0
         $unresolved = @()
         foreach ($c in $citationList) {
             if ($c.targetKey) {
@@ -330,11 +372,13 @@ switch ($Mode) {
                 if ($r -and $r.Value.status -eq 'ok') { $resolvedCount++ } else { $unresolved += $c }
             } elseif ($c.type -eq 'rambam' -and $c.resolvedBook -and -not $c.perek) {
                 $bookOkCount++
+            } elseif ($c.type -eq 'rambam' -and $c.title -match '^ו') {
+                $noiseCount++
             } else {
                 $unresolved += $c
             }
         }
-        Write-Output ("citations: {0} total | {1} resolved | {2} book-level (Rambam, no perek cited) | {3} unresolved" -f $citationList.Count, $resolvedCount, $bookOkCount, @($unresolved).Count)
+        Write-Output ("citations: {0} total | {1} resolved | {2} book-level (Rambam, no perek cited) | {3} prose-noise | {4} unresolved" -f $citationList.Count, $resolvedCount, $bookOkCount, $noiseCount, @($unresolved).Count)
         $unresolved | Group-Object type | ForEach-Object { Write-Output ("  {0}: {1}" -f $_.Name, $_.Count) }
         Write-Output ''
         Write-Output '--- unresolved detail (first 150) ---'
