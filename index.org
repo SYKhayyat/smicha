@@ -157,6 +157,10 @@
 - [[file:even-haezer/02-yichud-tzniyus.org][02 — ייחוד, צניעות, והרחקות]]
 - [[file:even-haezer/03-gittin.org][03 — גיטין, עגונות, ויוחסין]]
 
+* חלק ט — בין אדם לחבירו
+
+- [[file:bein-adam-lachaveiro/01-lashon-hara.org][01 — לשון הרע, רכילות, ומוציא שם רע]] ← *חדש*
+
 * סדר לימוד מומלץ
 
 ** שלב א — התשתית
