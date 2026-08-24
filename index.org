@@ -70,6 +70,7 @@
 - [[file:basar-bechalav/04-nat-bar-nat.org][04 — נותן טעם בר נותן טעם]]
 - [[file:basar-bechalav/05-hamtanah.org][05 — המתנה, קינוח והדחה]]
 - [[file:basar-bechalav/06-kelim-vehafradah.org][06 — כלים, הפרדה, ותערובת בשר בחלב]]
+- [[file:basar-bechalav/07-dag-im-basar.org][07 — דג עם בשר וכללי הסכנה]] ← *חדש*
 
 ** תערובות
 - [[file:taaroves/01-yesodei-bitul.org][01 — יסודי הביטול: רוב, שישים, מין במינו]]
