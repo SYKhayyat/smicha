@@ -1,6 +1,6 @@
 ﻿param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('extract', 'fetch', 'report')]
+    [ValidateSet('extract', 'fetch', 'report', 'match')]
     [string]$Mode,
     [string]$RepoRoot,
     [string]$WorkDir
@@ -85,7 +85,7 @@ function Find-Citations {
         foreach ($m in $saMatches) {
             $windowEnd = [Math]::Min($line.Length, $m.Index + 160)
             $window = $line.Substring($m.Index, $windowEnd - $m.Index)
-            $simanMatch = [regex]::Match($window, "סי['′]?\s*([\p{IsHebrew}""']{1,8})")
+            $simanMatch = [regex]::Match($window, "(?:סי['\u05F3\x22\u201D]\s*|סימן\s+)([\p{IsHebrew}\x22']{1,8})")
             if (-not $simanMatch.Success) {
                 $simanMatch = [regex]::Match($window, 'סימן\s+([\p{IsHebrew}"]{1,8})')
             }
@@ -304,11 +304,12 @@ switch ($Mode) {
             try {
                 $uri = 'https://www.sefaria.org/api/texts/{0}.{1}?context=0&commentary=0' -f $parts[1], $parts[2]
                 $resp = Invoke-RestMethod -Uri $uri -TimeoutSec 45
-                if ($resp.text -is [array]) {
-                    $flat = @($resp.text | ForEach-Object { if ($_ -is [array]) { ($_ -join ' ') } else { [string]$_ } })
+                $srcText = if ($resp.PSObject.Properties['he'] -and $resp.he) { $resp.he } else { $resp.text }
+                if ($srcText -is [array]) {
+                    $flat = @($srcText | ForEach-Object { if ($_ -is [array]) { ($_ -join ' ') } else { [string]$_ } })
                     $snippet = ($flat -join ' ')
                 } else {
-                    $snippet = [string]$resp.text
+                    $snippet = [string]$srcText
                 }
                 if ($snippet.Length -gt 3500) { $snippet = $snippet.Substring(0, 3500) }
                 $status = 'ok'
@@ -390,5 +391,75 @@ switch ($Mode) {
             }
             Write-Output ("{0}:{1}  {2}" -f $c.file, $c.line, $what)
         }
+    }
+
+    'match' {
+        if (-not (Test-Path -LiteralPath $ResultsPath)) { throw 'run fetch first' }
+        $data = Get-Content -LiteralPath $ResultsPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($data.citations.PSObject.Properties['value']) { $citationList = @($data.citations.value) } else { $citationList = @($data.citations) }
+
+        function Fold-Hebrew {
+            param([string]$s)
+            $s = $s -replace '[\u0591-\u05C7\u05F4\u05F3"''<>/|*\[\]]', ''
+            $s = $s -replace '\u05DA', '\u05DB' -replace '\u05DD', '\u05DE' -replace '\u05DF', '\u05E0' -replace '\u05E3', '\u05E4' -replace '\u05E5', '\u05E6'
+            return $s
+        }
+        function DeMatres {
+            param([string]$s)
+            return ($s -replace '[\u05D5\u05D9]', '')
+        }
+
+        $stop = @('של', 'את', 'על', 'אין', 'אם', 'כל', 'רמב', 'הלכות', 'מקורות', 'שו', 'רמ', 'סי', 'עי', 'וכן', 'אלא', 'שה', 'מה', 'או', 'זה', 'כגון', 'לכן', 'מכל')
+        $fileCache = @{}
+        $rows = @()
+        foreach ($c in $citationList) {
+            if (-not $c.targetKey) { continue }
+            $r = $data.fetchResults.PSObject.Properties[$c.targetKey]
+            if (-not $r -or $r.Value.status -ne 'ok') { continue }
+            $snippet = $r.Value.snippet
+            if (-not $snippet) { continue }
+
+            $cacheKey = "$($c.file)"
+            if (-not $fileCache.ContainsKey($cacheKey)) {
+                $fp = Join-Path $RepoRoot ($c.file -replace '/', '\')
+                if (Test-Path -LiteralPath $fp) {
+                    $fileCache[$cacheKey] = Get-Content -LiteralPath $fp -Encoding UTF8
+                } else {
+                    $fileCache[$cacheKey] = @()
+                }
+            }
+            $lines = $fileCache[$cacheKey]
+            $lo = [Math]::Max(0, $c.line - 3)
+            $hi = [Math]::Min($lines.Count - 1, $c.line + 1)
+            $context = ($lines[$lo..$hi] -join ' ')
+            if ($context -match 'מקורות:') { continue }
+
+            $tokens = [regex]::Matches($context, '[\p{IsHebrew}]{3,}') |
+                ForEach-Object { $_.Value.Trim([char]0x05F4, [char]0x05F3, '"', "'") } |
+                Where-Object { $_.Length -ge 3 -and $stop -notcontains $_ } |
+                Select-Object -Unique -First 25
+            if (@($tokens).Count -lt 4) { continue }
+
+            $normSnippet = Fold-Hebrew (($snippet -replace '<[^>]+>', ' '))
+            $normSnippetDeM = DeMatres $normSnippet
+            $hits = 0
+            foreach ($t in $tokens) {
+                $pat = Fold-Hebrew $t
+                if ($normSnippet.Contains($t) -or $normSnippet.Contains($pat)) { $hits++; continue }
+                if ($normSnippetDeM.Contains((DeMatres $pat))) { $hits++ }
+            }
+            $score = [Math]::Round(100 * $hits / @($tokens).Count)
+            $rows += [pscustomobject]@{ score = $score; file = $c.file; line = $c.line; key = $c.targetKey; text = $c.text }
+        }
+
+        $sorted = @($rows | Sort-Object score)
+        $out = @()
+        foreach ($row in $sorted) {
+            $out += ("{0}%  {1}:{2}  [{3}]  {4}" -f $row.score, $row.file, $row.line, ($row.key -split '\|')[0], $row.text)
+        }
+        [IO.File]::WriteAllLines((Join-Path $WorkDir 'match-report.txt'), $out, (New-Object System.Text.UTF8Encoding $true))
+        $low = @($sorted | Where-Object { $_.score -lt 25 }).Count
+        Write-Output ("matched {0} citations; below-25%: {1}" -f @($rows).Count, $low)
+        Write-Output ("full list -> {0}\match-report.txt" -f $WorkDir)
     }
 }
