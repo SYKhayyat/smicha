@@ -160,6 +160,7 @@
 - [[file:even-haezer/01-ishus-kiddushin.org][01 — קידושין, נישואין, כתובה, וחיובי אישות]]
 - [[file:even-haezer/02-yichud-tzniyus.org][02 — ייחוד, צניעות, והרחקות]]
 - [[file:even-haezer/03-gittin.org][03 — גיטין, עגונות, ויוחסין]]
+- [[file:even-haezer/04-yibbum-chalitzah.org][04 — יבום וחליצה: זיקה, מאמר, וסדר העריות בנפילה]] ← *חדש*
 
 * חלק י — תלמוד תורה ופסק הלכה
 
