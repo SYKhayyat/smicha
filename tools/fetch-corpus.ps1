@@ -29,6 +29,7 @@ function Test-Wanted {
     }
     if (($cats -contains 'Mishnah') -and ($title -match '^Mishnah ') -and ($title -notmatch ' on ')) { return $true }
     if ($title -match '^Bartenura' -and $title -notmatch 'English') { return $true }
+    if ($title -match '^Tiferet Yisrael' -and $title -notmatch 'Shulchan Arukh|Notes by') { return $true }
     $saBase = @('Shulchan Arukh, Orach Chayim', 'Shulchan Arukh, Yoreh De''ah', 'Shulchan Arukh, Even HaEzer', 'Shulchan Arukh, Choshen Mishpat')
     if ($saBase -contains $title) { return $true }
     foreach ($a in $commentaryAuthors) {
