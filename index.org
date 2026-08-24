@@ -61,7 +61,8 @@
 - [[file:issur-veheter/04-bishul-akum.org][04 — בישולי עכו"ם, פת עכו"ם, וחלב עכו"ם]]
 - [[file:issur-veheter/05-stam-yeinam.org][05 — יין נסך וסתם יינם]]
 - [[file:issur-veheter/06-tevilas-kelim.org][06 — טבילת כלים]]
-- [[file:issur-veheter/07-tolaim.org][07 — תולעים ושרצים במאכלים]] ← *חדש*
+- [[file:issur-veheter/07-tolaim.org][07 — תולעים ושרצים במאכלים]] ✓
+- [[file:issur-veheter/08-avodas-kochavim.org][08 — עבודה זרה: אליל, הנאה, חגי עכו"ם, וחוקותיהם]] ← *חדש*
 
 ** בשר בחלב
 - [[file:basar-bechalav/01-yesodei-haissur.org][01 — יסודי האיסור: אכילה, הנאה, בישול]]
