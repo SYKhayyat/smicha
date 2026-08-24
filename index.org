@@ -140,7 +140,8 @@
 - [[file:choshen-mishpat/06-onaah-mekach-taus.org][06 — אונאה, מקח טעות, גניבת דעת, ותנאים]]
 - [[file:choshen-mishpat/07-hashavas-aveidah.org][07 — השבת אבידה, גזל, ופיקדון]]
 - [[file:choshen-mishpat/08-toen-venitan.org][08 — טוען ונטען, שבועות, מיגו, וחזקות]] ← *לב חו"מ*
-- [[file:choshen-mishpat/09-yerushos.org][09 — ירושות, צוואות, סדר נחלות, והבכור]] ← *חדש*
+- [[file:choshen-mishpat/09-yerushos.org][09 — ירושות, צוואות, סדר נחלות, והבכור]]
+- [[file:choshen-mishpat/10-gezel-geneivah.org][10 — גזל וגניבה: האיסור, הגדרים, וסדר חמד]] ← *חדש*
 
 * חלק ז — שאר יורה דעה
 
