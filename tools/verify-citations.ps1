@@ -1,6 +1,6 @@
 ﻿param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('extract', 'fetch', 'report', 'match')]
+    [ValidateSet('extract', 'fetch', 'report', 'match', 'matchlocal')]
     [string]$Mode,
     [string]$RepoRoot,
     [string]$WorkDir
@@ -461,5 +461,127 @@ switch ($Mode) {
         $low = @($sorted | Where-Object { $_.score -lt 25 }).Count
         Write-Output ("matched {0} citations; below-25%: {1}" -f @($rows).Count, $low)
         Write-Output ("full list -> {0}\match-report.txt" -f $WorkDir)
+    }
+
+    'matchlocal' {
+        if (-not (Test-Path -LiteralPath $ResultsPath)) { throw 'run fetch first' }
+        $corpusDir = Join-Path $WorkDir 'corpus'
+        if (-not (Test-Path -LiteralPath $corpusDir)) { throw "no corpus at $corpusDir" }
+        $data = Get-Content -LiteralPath $ResultsPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($data.citations.PSObject.Properties['value']) { $citationList = @($data.citations.value) } else { $citationList = @($data.citations) }
+
+        function Fold-Hebrew {
+            param([string]$s)
+            $s = $s -replace '[\u0591-\u05C7\u05F4\u05F3"''<>/|*\[\]]', ''
+            $s = $s -replace '\u05DA', '\u05DB' -replace '\u05DD', '\u05DE' -replace '\u05DF', '\u05E0' -replace '\u05E3', '\u05E4' -replace '\u05E5', '\u05E6'
+            return $s
+        }
+        function DeMatres {
+            param([string]$s)
+            return ($s -replace '[\u05D5\u05D9]', '')
+        }
+
+        $branchFile = @{
+            'O.C.' = 'Shulchan_Arukh,_Orach_Chayim.txt'
+            'Y.D.' = 'Shulchan_Arukh,_Yoreh_Deah.txt'
+            'E.H.' = 'Shulchan_Arukh,_Even_HaEzer.txt'
+            'C.M.' = 'Shulchan_Arukh,_Choshen_Mishpat.txt'
+        }
+
+        $sectionCache = @{}
+        function Get-LocalSection {
+            param([string]$FilePath, [string]$StartMarker, [string]$EndPattern)
+            $ck = "$FilePath::$StartMarker"
+            if ($sectionCache.ContainsKey($ck)) { return $sectionCache[$ck] }
+            $full = Join-Path $corpusDir $FilePath
+            $result = ''
+            if (Test-Path -LiteralPath $full) {
+                $lines = [IO.File]::ReadAllLines($full, [Text.Encoding]::UTF8)
+                $startIdx = -1
+                for ($i = 0; $i -lt $lines.Count; $i++) {
+                    if ($lines[$i] -match $StartMarker) { $startIdx = $i; break }
+                }
+                if ($startIdx -ge 0) {
+                    $endIdx = $lines.Count
+                    for ($j = $startIdx + 1; $j -lt $lines.Count; $j++) {
+                        if ($lines[$j] -match $EndPattern) { $endIdx = $j; break }
+                    }
+                    $chunk = $lines[($startIdx + 1)..($endIdx - 1)] -join ' '
+                    if ($chunk.Length -gt 400000) { $chunk = $chunk.Substring(0, 400000) }
+                    $result = $chunk
+                }
+            }
+            $sectionCache[$ck] = $result
+            return $result
+        }
+
+        $stop = @('של', 'את', 'על', 'אין', 'אם', 'כל', 'רמב', 'הלכות', 'מקורות', 'שו', 'רמ', 'סי', 'עי', 'וכן', 'אלא', 'שה', 'מה', 'או', 'זה', 'כגון', 'לכן', 'מכל')
+        $fileCtx = @{}
+        $rows = @()
+        foreach ($c in $citationList) {
+            if (-not $c.targetKey) { continue }
+            $parts = $c.targetKey -split '\|'
+
+            $localText = ''
+            $localHow = 'missing'
+            try {
+                if ($c.type -eq 'sa') {
+                    $bf = $branchFile[$c.branch]
+                    $localText = Get-LocalSection -FilePath $bf -StartMarker ("^Siman\s+{0}\s*$" -f $c.siman) -EndPattern '^Siman\s+\d+\s*$'
+                    if ($localText) { $localHow = "siman $($c.siman)" }
+                } elseif ($c.type -eq 'gemara' -and $c.resolvedTractate) {
+                    $tf = ($c.resolvedTractate -replace '[^a-zA-Z0-9 ,.\-]', '') -replace '\s+', '_'
+                    $amudAscii = if ("$($c.amud)" -eq [string][char]0x05D0) { 'a' } else { 'b' }
+                    $localText = Get-LocalSection -FilePath "$tf.txt" -StartMarker ("^Daf\s+{0}{1}\s*$" -f $c.daf, $amudAscii) -EndPattern '^Daf\s+\d+[ab]\s*$'
+                    if ($localText) { $localHow = "daf $($c.daf)$($c.amud)" }
+                } elseif ($c.type -eq 'rambam' -and $c.resolvedBook -and $c.perek) {
+                    $rf = ($c.resolvedBook -replace '[^a-zA-Z0-9 ,.\-]', '') -replace '\s+', '_'
+                    $localText = Get-LocalSection -FilePath "Mishneh_Torah,_$rf.txt" -StartMarker ("^Chapter\s+{0}\s*$" -f $c.perek) -EndPattern '^Chapter\s+\d+\s*$'
+                    if ($localText) { $localHow = "perek $($c.perek)" }
+                }
+            } catch { $localHow = "error:$($_.Exception.Message)" }
+
+            if (-not $localText) {
+                $r = $data.fetchResults.PSObject.Properties[$c.targetKey]
+                if ($r -and $r.Value.status -eq 'ok') { $localText = $r.Value.snippet; $localHow += '+snippet' } else { continue }
+            }
+
+            $cacheKey = "$($c.file)"
+            if (-not $fileCtx.ContainsKey($cacheKey)) {
+                $fp = Join-Path $RepoRoot ($c.file -replace '/', '\')
+                if (Test-Path -LiteralPath $fp) { $fileCtx[$cacheKey] = Get-Content -LiteralPath $fp -Encoding UTF8 } else { $fileCtx[$cacheKey] = @() }
+            }
+            $lines = $fileCtx[$cacheKey]
+            $lo = [Math]::Max(0, $c.line - 3)
+            $hi = [Math]::Min($lines.Count - 1, $c.line + 1)
+            $context = ($lines[$lo..$hi] -join ' ')
+            if ($context -match 'מקורות:') { continue }
+
+            $tokens = [regex]::Matches($context, '[\p{IsHebrew}]{3,}') |
+                ForEach-Object { $_.Value.Trim([char]0x05F4, [char]0x05F3, '"', "'") } |
+                Where-Object { $_.Length -ge 3 -and $stop -notcontains $_ } |
+                Select-Object -Unique -First 25
+            if (@($tokens).Count -lt 4) { continue }
+
+            $secFolded = Fold-Hebrew $localText
+            $secDeM = DeMatres $secFolded
+            $hits = 0
+            foreach ($t in $tokens) {
+                $pat = Fold-Hebrew $t
+                if ($secFolded.Contains($t) -or $secFolded.Contains($pat)) { $hits++; continue }
+                if ($secDeM.Contains((DeMatres $pat))) { $hits++ }
+            }
+            $score = [Math]::Round(100 * $hits / @($tokens).Count)
+            $rows += [pscustomobject]@{ score = $score; file = $c.file; line = $c.line; how = $localHow; text = $c.text }
+        }
+
+        $sorted = @($rows | Sort-Object score)
+        $out = @()
+        foreach ($row in $sorted) {
+            $out += ("{0}%  [{1}]  {2}:{3}  {4}" -f $row.score, $row.how, $row.file, $row.line, $row.text)
+        }
+        [IO.File]::WriteAllLines((Join-Path $WorkDir 'match-local-report.txt'), $out, (New-Object System.Text.UTF8Encoding $true))
+        $low = @($sorted | Where-Object { $_.score -lt 25 }).Count
+        Write-Output ("matchlocal: {0} scored; below-25%: {1}" -f @($rows).Count, $low)
     }
 }
