@@ -20,16 +20,22 @@ $commentaryAuthors = @(
 
 function Test-Wanted {
     param($book)
-    $cats = $book.categories
-    $isBavli = ($cats -contains 'Talmud') -and ($cats -contains 'Bavli')
-    $isMt = ($cats -contains 'Mishneh Torah')
-    $isSaBase = ($cats -contains 'Shulchan Arukh') -and ($cats.Count -le 4)
-    $isCommentary = $false
-    foreach ($a in $commentaryAuthors) {
-        if ($book.title -like "*$a*") { $isCommentary = $true; break }
+    $cats = @($book.categories)
+    $title = $book.title
+    if (($cats -contains 'Talmud') -and ($cats -contains 'Bavli') -and $title -notmatch ' on | Commentary|Yerushalmi') { return $true }
+    if ($cats -contains 'Mishneh Torah') {
+        if ($title -match '^Mishneh Torah, [A-Z]' -and $title -notmatch ' on ') { return $true }
+        return $false
     }
-    $isSa = $cats -contains 'Shulchan Arukh'
-    return ($isBavli -or $isMt -or $isSa -or $isCommentary)
+    if (($cats -contains 'Mishnah') -and ($title -match '^Mishnah ') -and ($title -notmatch ' on ')) { return $true }
+    if ($title -match '^Bartenura' -and $title -notmatch 'English') { return $true }
+    $saBase = @('Shulchan Arukh, Orach Chayim', 'Shulchan Arukh, Yoreh De''ah', 'Shulchan Arukh, Even HaEzer', 'Shulchan Arukh, Choshen Mishpat')
+    if ($saBase -contains $title) { return $true }
+    foreach ($a in $commentaryAuthors) {
+        if ($title -like "*$a*" -and $title -like 'Shulchan Arukh*') { return $true }
+    }
+    if ($title -match '^(Mishnah Berurah|Ben Ish Chai|Halachah Berurah|Iggerot Moshe|Yabia Omer|Chazon Ovadia)' -and $title -notmatch ' on ') { return $true }
+    return $false
 }
 
 Write-Host 'downloading books.json...'
@@ -39,7 +45,7 @@ $books = Get-Content -LiteralPath $tmp -Raw -Encoding UTF8 | ConvertFrom-Json
 Write-Output ("total books in index: " + @($books.books).Count)
 
 $wanted = @($books.books | Where-Object {
-    ($_.language -eq 'he') -and (Test-Wanted $_)
+    ($_.language -ieq 'hebrew') -and (Test-Wanted $_)
 })
 Write-Output ("wanted hebrew books: " + $wanted.Count)
 
