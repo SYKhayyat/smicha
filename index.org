@@ -121,6 +121,9 @@
 - [[file:moadim/02-chol-hamoed.org][02 — חול המועד]]
 - [[file:moadim/03-pesach.org][03 — פסח: חמץ ותערובתו]]
 - [[file:moadim/04-yamim-noraim-sukkos.org][04 — ימים נוראים, סוכות, חנוכה, פורים, ותעניות]]
+- [[file:moadim/05-sefiras-haomer-shavuos.org][05 — ספירת העומר ושבועות]]
+- [[file:moadim/06-rosh-chodesh.org][06 — ראש חדש וקידוש לבנה]]
+- [[file:moadim/07-arba-taaniyos-tisha-bav.org][07 — ארבע התעניות ותשעה באב]] ← *חדש*
 
 * חלק ה — תפילה וברכות
 
