@@ -158,6 +158,7 @@
 - [[file:yoreh-deah/06-mezuzah-sifrei-kodesh.org][06 — מזוזה, סת"ם, וכבוד הקדושה]]
 - [[file:yoreh-deah/07-refuah-vepikuach-nefesh.org][07 — רפואה, פיקוח נפש, וביקור חולים]]
 - [[file:yoreh-deah/08-mitzvos-haaretz.org][08 — תרומות, מעשרות, חלה, ערלה, שביעית, כלאים]]
+- [[file:yoreh-deah/09-safrus-depth.org][09 — ספרות לעומק: הקלף, הדיו, לשמה, וחוק תוכות]] ← *חדש*
 
 * חלק ח — אבן העזר
 
