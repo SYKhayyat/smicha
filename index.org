@@ -105,6 +105,7 @@
 - [[file:shabbos/18-hachanah.org][18 — הכנה משבת לחול]]
 - [[file:shabbos/19-neros-kiddush-havdalah.org][19 — נרות, קידוש, סעודות, הבדלה, וזמני היום]]
 - [[file:shabbos/20-chashmal.org][20 — חשמל ומכשירים מודרניים]]
+- [[file:shabbos/21-reshuyos-veeruvim.org][21 — רשויות, מבוי, ועירובי חצרות]] ← *חדש*
 
 * חלק ג — הלכות נדה
 
