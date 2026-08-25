@@ -38,7 +38,9 @@ for ($i = 0; $i -lt $titles.Count; $i += 10) {
             if ($pg.missing) { continue }
             $content = $null
             if ($pg.revisions -and $pg.revisions.Count -gt 0) {
-                $content = $pg.revisions[0].PSObject.Properties['*'].Value
+                $rev = $pg.revisions[0]
+                $content = $rev.content
+                if (-not $content) { $content = $rev.PSObject.Properties['*'].Value }
             }
             if (-not $content) { continue }
             $safe = ($pg.title -replace '^[^/]+/', '' -replace '/', '_') + '.txt'
