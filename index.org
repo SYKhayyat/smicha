@@ -179,7 +179,13 @@
 - [[file:zeraim/02-terumos.org][02 — תרומות: חיוב הקרקע, סדר ההפרשות, שיעורים]]
 - [[file:zeraim/03-maasros.org][03 — מעשרות: חיוב, זמנים, ומעשר ראשון]]
 - [[file:zeraim/04-shmitta-yovel.org][04 — שמיטה ויובל: הכללים ומחלוקת זמננו]]
-- [[file:zeraim/05-maaser-sheni.org][05 — מעשר שני: ראשי שנים וקדושתו]] ← *חדש*
+- [[file:zeraim/05-maaser-sheni.org][05 — מעשר שני: ראשי שנים וקדושתו]]
+- [[file:zeraim/06-kilayim-umatnos-kehuna.org][06 — כלאים וכ"ד מתנות כהונה]]
+- [[file:zeraim/07-bechoros-ubikurim.org][07 — בכורות וביכורים]]
+- [[file:kodshim/02-beis-habechira.org][02 — בית הבחירה: מקומותיו והבחירה העולמית]]
+- [[file:kodshim/03-korban-pesach.org][03 — קרבן פסח: היסודות]]
+- [[file:taharos/02-negaim.org][02 — נגעים: מראות הצרעת]]
+- [[file:taharos/03-parah-adumah.org][03 — פרה אדומה: כשרותה]] ← *חדש*
 
 * חלק יב — קדשים וטהרות (מחוץ לשו"ע)
 
