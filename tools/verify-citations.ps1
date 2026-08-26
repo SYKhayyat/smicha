@@ -126,7 +126,7 @@ function Find-Citations {
             }
         }
 
-        $rambamPattern = 'רמב"ם\s+(?:הלכות\s+)?([\p{IsHebrew}"][\p{IsHebrew}" ]*?)\s*(?:פ"?\s*([\p{IsHebrew}"]{1,8}))?(?:\s+ה"?\s*([\p{IsHebrew}"]{1,6}))?(?=\s*[;,.):]|$)'
+        $rambamPattern = 'רמב"ם\s+(?:הל[כות'']{0,6}\s+)?([\p{IsHebrew}"][\p{IsHebrew}" ]*?)\s*(?:פ"?\s*([\p{IsHebrew}"]{1,8}))?(?:\s+ה"?\s*([\p{IsHebrew}"]{1,6}))?(?=\s*[;,.):]|$)'
         $rambamMatch = [regex]::Match($line, $rambamPattern)
         if ($rambamMatch.Success -and $rambamMatch.Value -match 'הלכות|פ"') {
             $perek = $null; $halacha = $null
