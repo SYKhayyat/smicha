@@ -1,0 +1,6 @@
+number,title,url,D,R,why,risk
+1,Add provenance citation validation and publication guidance for the smicha corpus,https://github.com/SYKhayyat/smicha/issues/1,4,2,Corpus manifest + CI checks; misattribution risk docs only,Docs only
+2,[Medium/bug] fetch book-counter init after use tally wiped,https://github.com/SYKhayyat/smicha/issues/2,1,3,Move init before loop; wiped tally mis-reports visibly,Visible mis-report
+3,[Medium/bug] fetch-ahheasid retries forever on persistent failure,https://github.com/SYKhayyat/smicha/issues/3,1,3,Retry counter + throw; infinite loop hangs visibly,Visible hang
+4,[Low/bug] Hardcoded backslash paths break Linux/macOS,https://github.com/SYKhayyat/smicha/issues/4,1,3,Slash-agnostic joins; breaks non-Windows visibly,Visible break
+5,[Low/bug] seif-katan conflated with seif,https://github.com/SYKhayyat/smicha/issues/5,1,4,Separate seifKatan; SK silently mislabeled as seif,Silent mislabel
